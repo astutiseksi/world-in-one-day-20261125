@@ -19,6 +19,24 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Verify the decoded bytes really are a PNG: every PNG file starts
+// with the same 8-byte signature. Corrupt or truncated chunks must
+// fail loudly here, not reach the gate as a bad image.
+function assertPngSignature(bytes: Buffer): void {
+  const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const hasPngSignature =
+    bytes.length >= PNG_SIGNATURE.length &&
+    PNG_SIGNATURE.every((byte, i) => bytes[i] === byte);
+  if (!hasPngSignature) {
+    const found = [...bytes.subarray(0, PNG_SIGNATURE.length)]
+      .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+      .join(' ');
+    throw new Error(
+      `decoded bytes are not a PNG: expected the PNG signature (89 50 4E 47 0D 0A 1A 0A), found (${found})`,
+    );
+  }
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const chunkNames = readdirSync(here)
   .filter((n) => /^img-\d+\.txt$/.test(n))
@@ -31,19 +49,7 @@ const b64 = chunkNames
   .join('');
 const png = Buffer.from(b64, 'base64');
 
-// Verify the decoded bytes really are a PNG before writing anything:
-// every PNG file starts with the same 8-byte signature. Corrupt or
-// truncated chunks must fail loudly here, not reach the gate as a bad
-// image.
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const hasPngSignature =
-  png.length >= PNG_SIGNATURE.length &&
-  PNG_SIGNATURE.every((byte, i) => png[i] === byte);
-if (!hasPngSignature) {
-  throw new Error(
-    'decoded bytes are not a PNG: missing the PNG signature (89 50 4E 47 0D 0A 1A 0A)',
-  );
-}
+assertPngSignature(png);
 
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const target = join(outDir, 'entry.png');
