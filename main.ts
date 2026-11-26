@@ -31,6 +31,20 @@ const b64 = chunkNames
   .join('');
 const png = Buffer.from(b64, 'base64');
 
+// Verify the decoded bytes really are a PNG before writing anything:
+// every PNG file starts with the same 8-byte signature. Corrupt or
+// truncated chunks must fail loudly here, not reach the gate as a bad
+// image.
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const hasPngSignature =
+  png.length >= PNG_SIGNATURE.length &&
+  PNG_SIGNATURE.every((byte, i) => png[i] === byte);
+if (!hasPngSignature) {
+  throw new Error(
+    'decoded bytes are not a PNG: missing the PNG signature (89 50 4E 47 0D 0A 1A 0A)',
+  );
+}
+
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const target = join(outDir, 'entry.png');
 
